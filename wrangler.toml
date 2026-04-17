@@ -1,0 +1,6 @@
+name = "aniwave-scraper-api"
+main = "api/index.ts"
+compatibility_date = "2024-04-01"
+
+# Enable Node.js compatibility for any Node-specific APIs if needed
+# compatibility_flags = [ "nodejs_compat" ]
