@@ -65,7 +65,7 @@ async function getAnilistInfo(anilistId: string) {
   }
 }
 
-async function getAniwaveIdFromAnilist(anilistId: string) {
+export async function getAniwaveIdFromAnilist(anilistId: string) {
   try {
     if (idCache.has(anilistId)) return idCache.get(anilistId)!;
 
@@ -240,6 +240,68 @@ app.get('/api/search', async (c) => {
   } catch (error: any) {
     console.error('Error scraping:', error);
     return c.json({ error: 'Failed to scrape data', details: error.message }, 500);
+  }
+});
+
+app.get('/api/episodes', async (c) => {
+  const id = c.req.query('id');
+  if (!id) {
+    return c.json({ error: 'id is required' }, 400);
+  }
+
+  try {
+    const aniwaveId = await getAniwaveIdFromAnilist(id);
+    if (!aniwaveId) {
+      return c.json({ error: 'Anime not found on Aniwave' }, 404);
+    }
+
+    // Extract numeric ID from the slug (e.g., naruto-76396 -> 76396)
+    const numericIdMatch = aniwaveId.match(/-(\d+)$/);
+    const numericId = numericIdMatch ? numericIdMatch[1] : aniwaveId;
+
+    const episodesUrl = `https://aniwaves.ru/ajax/episode/list/${numericId}`;
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+      'Accept': 'application/json, text/javascript, */*; q=0.01',
+      'X-Requested-With': 'XMLHttpRequest'
+    };
+
+    const response = await fetch(episodesUrl, { headers });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch episodes list: ${response.status}`);
+    }
+    const data = await response.json();
+    const html = data.result;
+
+    if (!html) {
+      return c.json({ error: 'Episodes not found' }, 404);
+    }
+
+    const episodes: any[] = [];
+    const regex = /<li[^>]*title="([^"]+)"[^>]*>\s*<a[^>]*data-num="([0-9.]+)"[^>]*data-sub="([0-9]*)"[^>]*data-dub="([0-9]*)"[^>]*>[\s\S]*?<\/a>\s*<\/li>/g;
+    let match;
+
+    while ((match = regex.exec(html)) !== null) {
+      episodes.push({
+        title: match[1],
+        number: parseFloat(match[2]),
+        isSub: match[3] === '1',
+        isDub: match[4] === '1'
+      });
+    }
+
+    // Sort episodes sequentially
+    episodes.sort((a, b) => a.number - b.number);
+
+    return c.json({
+      id,
+      aniwaveId,
+      episodes
+    });
+
+  } catch (error: any) {
+    console.error('Error fetching episodes:', error);
+    return c.json({ error: 'Failed to fetch episodes data', details: error.message }, 500);
   }
 });
 
