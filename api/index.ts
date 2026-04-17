@@ -34,16 +34,34 @@ async function getAnilistInfo(anilistId: string) {
     });
     
     if (!res.ok) {
-      const errText = await res.text();
-      console.error(`Anilist API Error: ${res.status} - ${errText}`);
       throw new Error(`Anilist API returned ${res.status}`);
     }
     
     const data = await res.json();
     return data.data?.Media;
   } catch (error) {
-    console.error('Error fetching Anilist info:', error);
-    throw error;
+    console.error('Error fetching Anilist info, falling back to Kitsu:', error);
+    try {
+      // Fallback to Kitsu API if Anilist rate limits (429 on Cloudflare Workers)
+      const kitsuRes = await fetch(`https://kitsu.io/api/edge/mappings?filter[externalSite]=anilist/anime&filter[externalId]=${anilistId}&include=item`);
+      if (!kitsuRes.ok) throw new Error(`Kitsu API returned ${kitsuRes.status}`);
+      const kitsuData = await kitsuRes.json();
+      const anime = kitsuData.included?.find((i: any) => i.type === 'anime');
+      if (anime) {
+        return {
+          title: {
+            english: anime.attributes.titles.en || null,
+            romaji: anime.attributes.titles.en_jp || null,
+            native: anime.attributes.titles.ja_jp || null,
+          },
+          format: anime.attributes.subtype === 'movie' || anime.attributes.showType === 'movie' ? 'MOVIE' : 'TV',
+          synonyms: anime.attributes.abbreviatedTitles || []
+        };
+      }
+    } catch (kitsuError) {
+      console.error('Error fetching from Kitsu fallback:', kitsuError);
+    }
+    return null;
   }
 }
 
