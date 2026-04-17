@@ -25,14 +25,25 @@ async function getAnilistInfo(anilistId: string) {
     `;
     const res = await fetch('https://graphql.anilist.co', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json', 
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+      },
       body: JSON.stringify({ query })
     });
+    
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`Anilist API Error: ${res.status} - ${errText}`);
+      throw new Error(`Anilist API returned ${res.status}`);
+    }
+    
     const data = await res.json();
     return data.data?.Media;
   } catch (error) {
     console.error('Error fetching Anilist info:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -79,10 +90,17 @@ async function getAniwaveIdFromAnilist(anilistId: string) {
         let match;
         while ((match = regex.exec(html)) !== null) {
           if (!results.find(r => r.id === match![1])) {
+            let enTitle = match![3];
+            enTitle = enTitle.replace(/&amp;/g, '&')
+                             .replace(/&quot;/g, '"')
+                             .replace(/&#039;/g, "'")
+                             .replace(/&lt;/g, '<')
+                             .replace(/&gt;/g, '>');
+                             
             results.push({
               id: match![1],
               jp: (match![2] || '').toLowerCase(),
-              en: match![3].toLowerCase()
+              en: enTitle.toLowerCase()
             });
           }
         }
@@ -162,7 +180,7 @@ async function getAniwaveIdFromAnilist(anilistId: string) {
   return null;
   } catch (error) {
     console.error('Error in getAniwaveIdFromAnilist:', error);
-    return null;
+    throw error;
   }
 }
 
